@@ -1,10 +1,11 @@
 import { RouterContext } from "oak";
-import { TransactionCollection, UserCollection } from "../db/database.ts";
-import { TransactionSchema, UserSchema } from "../db/schema.ts";
+import { BookCollection, AuthorCollection, UserCollection } from "../db/database.ts";
+import { AuthorSchema, BookSchema, UserSchema } from "../db/schema.ts";
 import { ObjectId } from "mongo"
 
 type AddUserContext = RouterContext<"/addUser", Record<string | number, string | undefined>, Record<string, any>>
-type AddTransactionContext = RouterContext<"/addTransaction", Record<string | number, string | undefined>, Record<string, any>>
+type AddBookContext = RouterContext<"/addBook", Record<string | number, string | undefined>, Record<string, any>>
+type AddAuthorContext = RouterContext<"/addAuthor", Record<string | number, string | undefined>, Record<string, any>>
 
 export const addUser = async (context:AddUserContext) => {
 
@@ -12,40 +13,38 @@ export const addUser = async (context:AddUserContext) => {
 
         const result = context.request.body({ type: "json" });
         const value = await result.value;
-        if (!(value?.email && value?.name && value?.surname && value?.telephone && value?.DNI)) {
+        if (!(value?.name && value?.email && value?.password)) {
             context.response.status = 400;
             context.response.body = { message: "Bad Request" }
             return;
         }
 
-        const isAllWellFormated = new RegExp("^[0-9]{8,8}[A-Za-z]$").test(value.DNI) && new RegExp("[0-9]{9}").test(value.telephone) 
-        && new RegExp("^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$").test(value.email)
-
-        if (!isAllWellFormated) {
+        if (!new RegExp("^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$").test(value.email)) {
             context.response.status = 422;
-            context.response.body = { message: "Bad format on DNI, telephone or email" }
+            context.response.body = { message: "Bad format on email" }
             return;
         }
 
-        if (await UserCollection.findOne({ $or:[{email: value.email}, {telephone: value.telephone}, {DNI: value.DNI} ]})) {
+        if (await UserCollection.findOne({email: value.email})){
             context.response.status = 409;
             context.response.body = { message: "Already exists" };
             return
         }
 
-        let iban = "ES"
-        for(let i = 0; i < 20; i++){
-            iban += Math.floor(Math.random() * (9 - 0 + 1) + 0);
-        }
-        while (await UserCollection.findOne({IBAN: iban})){
-            iban = "ES"
-            for (let i = 0; i < 20; i++) {
-                iban += Math.floor(Math.random() * (9 - 0 + 1) + 0);
-            }
+        const encoder = new TextEncoder();
+        const hashedPassword = await crypto.subtle.digest("SHA-256", encoder.encode(value.password));
+        const hashedPasswordString = Array.from(new Uint8Array(hashedPassword)).map(b => b.toString(16).padStart(2, "0")).join("");
+
+        const user : Partial<UserSchema> = {
+            name: value.name,
+            email: value.email,
+            password: hashedPasswordString,
+            createdAt: new Date().toString(),
+            cart: new Array<ObjectId>
         }
 
-        const id = await UserCollection.insertOne({...value,IBAN:iban} as UserSchema);
-        context.response.body = { ...value, IBAN: iban, _id: id }
+        const id = await UserCollection.insertOne(user as UserSchema);
+        context.response.body = {_id: id, ...user}
         
     } catch (error) {
         console.error(error)
@@ -53,28 +52,70 @@ export const addUser = async (context:AddUserContext) => {
     
 };
 
-export const addTransaction = async (context: AddTransactionContext) => {
+export const addBook = async (context: AddBookContext) => {
     try {
 
         const result = context.request.body({ type: "json" });
         const value = await result.value;
-        if (!(value?.ID_Sender && value?.ID_Receiver && value?.amount)) {
+        if (!(value?.title && value?.author && value?.pages)) {
             context.response.status = 400;
             context.response.body = { message: "Bad Request" }
             return;
         }
 
-        if (!(await UserCollection.findOne({ _id: new ObjectId(value.ID_Sender) }) && await UserCollection.findOne({ _id: new ObjectId(value.ID_Sender) }))) {
+        const author = await AuthorCollection.findOne({ _id: new ObjectId(value.author) })
+        if (!author) {
             context.response.status = 404;
-            context.response.body = { message: "One or more users does not exist" };
+            context.response.body = { message: "Author not found" }; 
             return
         }
 
-        await TransactionCollection.insertOne(value as TransactionSchema);
-        context.response.body = value
+        const book : Partial<BookSchema> = {
+            title: value.title,
+            author: new ObjectId(value.author),
+            pages: value.pages,
+        }
+
+        if (await BookCollection.findOne(book)){
+            context.response.status = 409;
+            context.response.body = { message: "Book already exists" }; 
+            return
+        }
+
+        book.ISBN = crypto.randomUUID()
+
+        const bookId = await BookCollection.insertOne(book as BookSchema);
+
+        await AuthorCollection.updateOne({ _id: author._id}, {
+            $set: {
+                books: author.books.concat(bookId)
+            }
+        })
+
+        context.response.body = { _id: bookId, ...book}
         
     } catch (error) {
         console.error(error)
     }
     
+};
+
+export const addAuthor = async (context: AddAuthorContext) => {
+    try {
+
+        const result = context.request.body({ type: "json" });
+        const value = await result.value;
+        if (!value?.name) {
+            context.response.status = 400;
+            context.response.body = { message: "Bad Request" }
+            return;
+        }
+
+        const id = await AuthorCollection.insertOne({name: value.name, books: new Array<ObjectId>} as AuthorSchema);
+        context.response.body = { _id: id, name: value.name }
+
+    } catch (error) {
+        console.error(error)
+    }
+
 };

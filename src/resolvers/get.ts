@@ -1,43 +1,31 @@
 import { RouterContext } from "oak";
-import { UserCollection } from "../db/database.ts";
+import { BookCollection, UserCollection } from "../db/database.ts";
 import { ObjectId } from "mongo"
+import { getQuery } from "oak/helpers.ts";
 
-type GetUserContext = RouterContext<"/getUser/:param", {
-    param: string;
-} & Record<string | number, string | undefined>, Record<string, any>>
+type GetUserContext = RouterContext<"/getBooks", Record<string | number, string | undefined>, Record<string, any>>
 
-export const getUser = async (context: GetUserContext) => {
+export const getBooks = async (context: GetUserContext) => {
     try {
 
-        if (!(context.params?.param)){
+        const params = getQuery(context, { mergeParams: true });
+
+        if (!params?.page){
             context.response.status = 400
             context.response.body = {message: "Bad Request"}
             return
         }
 
-        let arg = {}
-        if (new RegExp("^[0-9]{8,8}[A-Za-z]$").test(context.params.param)){
-            arg = { DNI: context.params.param }
-        } else if (new RegExp("[0-9]{9}").test(context.params.param)) {
-            arg = { telephone: context.params.param }
-        } else if (new RegExp("^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$").test(context.params.param)) {
-            arg = { email: context.params?.param }
-        } else if (new RegExp("([a-zA-Z]{2})\s*\t*(\d{2})\s*\t*(\d{4})\s*\t*(\d{4})\s*\t*(\d{2})\s*\t*(\d{10})","g").test(context.params.param)) {
-            /*Por alguna razon no entra aqui a pesar de que la expresion regular esta bien, la he probado en otros lugares y es correcta, así que no busca por iban*/
-            arg = { IBAN: context.params.param }
-        } else {
-            arg = { _id: new ObjectId(context.params.param)}
+        let query = {}
+
+        if(params?.title){
+            query = { title: params.title }
         }
 
-        const user = await UserCollection.findOne(arg)
-        if (user) {
-            context.response.body = user;
-        }else{
-            context.response.status = 404
-            context.response.body = {
-                message: "User not found"
-            }
-        }
+        const books = await BookCollection.find(query).skip(Number(params.page)*10).limit(10).toArray()
+
+        context.response.body = books
+        
         
     } catch (error) {
         console.error(error)

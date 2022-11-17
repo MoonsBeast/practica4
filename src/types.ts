@@ -1,14 +1,21 @@
+import { ObjectId } from "mongo"
+
 export type User = {
-    DNI: string,
-    email: string,
     name: string,
-    surname: string,
-    telephone : string,
-    IBAN : string
+    email: string,
+    password: string,
+    createdAt : string,
+    cart : ObjectId[]
 }
 
-export type Transaction = {
-    ID_Sender: string,
-    ID_Receiver: string
-    amount: number
+export type Book = {
+    title: string,
+    author: ObjectId
+    pages: number,
+    ISBN: string
+}
+
+export type Author = {
+    name: string,
+    books: ObjectId[]
 }
