@@ -1,21 +1,20 @@
-import { ObjectId } from "mongo"
-
-export type User = {
+export type CarShop = {
     name: string,
-    email: string,
-    password: string,
-    createdAt : string,
-    cart : ObjectId[]
+    city: string,
+    id: string,
+    vendors: Vendor[]
+}
+export type Vendor = {
+    name: string,
+    id: string,
+    cars: Car[],
 }
 
-export type Book = {
-    title: string,
-    author: ObjectId
-    pages: number,
-    ISBN: string
-}
-
-export type Author = {
-    name: string,
-    books: ObjectId[]
+export type Car = {
+    id: string,
+    plate: string,
+    color: string,
+    seats: number,
+    model: string,
+    price: number
 }

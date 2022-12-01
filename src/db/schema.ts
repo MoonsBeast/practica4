@@ -1,6 +1,6 @@
-import { User, Book, Author } from "../types.ts"
-import {ObjectId} from "mongo"
+import { Car, CarShop, Vendor } from "../types.ts"
+import { ObjectId } from "mongo"
 
-export type UserSchema = User & { _id: ObjectId}
-export type BookSchema = Book & { _id: ObjectId }
-export type AuthorSchema = Author & { _id: ObjectId }
+export type CarShopSchema = Omit<CarShop, "id" | "vendors"> & { _id: ObjectId, vendors: ObjectId[] }
+export type VendorSchema = Omit<Vendor, "id" | "cars"> & { _id: ObjectId, cars: ObjectId[] }
+export type CarSchema = Omit<Car, "id"> & { _id: ObjectId }

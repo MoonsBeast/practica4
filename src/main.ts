@@ -1,31 +1,67 @@
-import { Application, Router } from "oak";
+import { ApolloServer } from "apolloserver"
+import { startStandaloneServer } from "apolloserver/standalone"
 import { config } from "dotenv"
-import { addUser,addAuthor,addBook } from "./resolvers/post.ts"
-import { getBooks } from "./resolvers/get.ts"
-import { deleteUser } from "./resolvers/delete.ts"
-import { updateCart } from "./resolvers/put.ts"
 
-const router = new Router();
-const env = config()
+import { typeDefs } from "./gqlschema.ts"
+import { CarSchema, VendorSchema, CarShopSchema } from "./db/schema.ts"
+import { CarShopsVendors } from "./resolvers/carshop.ts"
+import { VendorsCars } from "./resolvers/vendor.ts"
+import { 
+    getCarById,
+    getCarInPriceRange,
+    getVendorById,
+    getVendorByName,
+    getCarShopById,
+    getCarShopsByCity } from "./resolvers/query.ts"
+import { 
+    createCar,
+    createCarShop,
+    createVendor,
+    addCarToVendor,
+    addVendorToCarShop } from "./resolvers/mutations.ts"
 
-if(!env.PORT){
+const env = config();
+
+if (!env.PORT) {
     console.error("No enviroment variable: PORT")
     throw Error("No enviroment variable: PORT")
 }
 
-router.get("/test",(context) => {
+const resolvers = {
+    CarShop: {
+        vendors: CarShopsVendors,
+        id: (parent:CarShopSchema) => parent._id.toString() 
+    },
+    Vendor: {
+        cars: VendorsCars,
+        id: (parent:VendorSchema) => parent._id.toString() 
+    },
+    Car: {
+        id: (parent: CarSchema) => parent._id.toString()
+    },
+    Query: {
+        getCarById: getCarById,
+        getCarInPriceRange: getCarInPriceRange,
+        getVendorById: getVendorById,
+        getVendorByName: getVendorByName,
+        getCarShopById: getCarShopById,
+        getCarShopsByCity: getCarShopsByCity
+    },
+    Mutation: {
+        createVendor: createVendor,
+        createCar: createCar,
+        createCarShop: createCarShop,
+        addCarToVendor: addCarToVendor,
+        addVendorToCarShop: addVendorToCarShop
+    }
+}
 
-    context.response.body = "Up and Running"
+const server = new ApolloServer({
+    typeDefs,
+    resolvers,
+});
 
-}).post("/addUser",addUser)
-    .post("/addBook", addBook)
-    .post("/addAuthor", addAuthor)
-    .get("/getBooks",getBooks)
-    .delete("/deleteUser/:_id", deleteUser)
-    .put("/updateCart",updateCart)
-
-const app = new Application();
-app.use(router.routes())
-app.use(router.allowedMethods())
-
-await app.listen({port: Number(env.PORT)})
+const { url } = await startStandaloneServer(server, {
+    listen: { port: env.PORT }
+});
+console.log(`Running on ${url}`)
